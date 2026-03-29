@@ -193,15 +193,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-neutral-950 to-neutral-900">
-      <header className="border-b border-neutral-800 bg-neutral-950/80 backdrop-blur sticky top-0 z-10">
+      <header className="border-b border-neutral-700/50 bg-neutral-950/90 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-lg flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="font-semibold text-white text-sm">Proposal Builder</h1>
-              <p className="text-xs text-neutral-500">AI Engineering Demo — Overclock Accelerator</p>
+              <h1 className="font-semibold text-white text-sm tracking-tight">Proposal Builder</h1>
+              <p className="text-xs text-neutral-400">AI Engineering Demo — Overclock Accelerator</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -210,7 +210,7 @@ export default function Home() {
                 {PROVIDER_LABELS[currentModel.provider]} · {currentModel.name}
               </Badge>
             )}
-            <Badge variant="outline" className="text-xs text-neutral-400 border-neutral-700">
+            <Badge variant="outline" className="text-xs text-neutral-300 border-neutral-600">
               {currentModel?.inputPricePer1K === 0 ? "Free tier" : `$${currentModel?.inputPricePer1K}/1K in`}
             </Badge>
           </div>
@@ -219,16 +219,16 @@ export default function Home() {
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid w-full grid-cols-3 mb-8 bg-neutral-900 border border-neutral-800">
-            <TabsTrigger value="builder" className="flex items-center gap-2 data-[state=active]:bg-neutral-800">
+          <TabsList className="grid w-full grid-cols-3 mb-8 bg-neutral-900/80 border border-neutral-700/50">
+            <TabsTrigger value="builder" className="flex items-center gap-2 text-neutral-400 data-[state=active]:bg-neutral-800 data-[state=active]:text-white">
               <FileText className="w-4 h-4" />
               Proposal Builder
             </TabsTrigger>
-            <TabsTrigger value="config" className="flex items-center gap-2 data-[state=active]:bg-neutral-800">
+            <TabsTrigger value="config" className="flex items-center gap-2 text-neutral-400 data-[state=active]:bg-neutral-800 data-[state=active]:text-white">
               <Settings className="w-4 h-4" />
               Configuration
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2 data-[state=active]:bg-neutral-800">
+            <TabsTrigger value="analytics" className="flex items-center gap-2 text-neutral-400 data-[state=active]:bg-neutral-800 data-[state=active]:text-white">
               <BarChart3 className="w-4 h-4" />
               Run Analytics
             </TabsTrigger>
@@ -238,24 +238,24 @@ export default function Home() {
           <TabsContent value="builder" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <Card className="bg-neutral-900 border-neutral-800">
+                <Card className="bg-neutral-900 border-neutral-700/50">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-medium text-neutral-200">Describe Your Engagement</CardTitle>
-                    <CardDescription className="text-xs text-neutral-500">
+                    <CardDescription className="text-xs text-neutral-400">
                       Tell the AI what kind of consulting work this covers. Include client, deliverables, timeline, budget.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Textarea
                       placeholder="e.g. I need a consulting agreement for a 3-month data analytics engagement with a mid-size fintech company. Budget is $25,000. Deliverables include a data pipeline audit, recommendations report, and 2 strategy sessions..."
-                      className="min-h-[160px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none text-sm"
+                      className="min-h-[160px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-500 resize-none text-sm"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                     />
                     <Button
                       onClick={handleSubmit}
                       disabled={isGenerating || !prompt.trim()}
-                      className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                      className="w-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white font-medium transition-colors disabled:opacity-40"
                     >
                       {isGenerating ? (
                         <>
@@ -272,17 +272,17 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-neutral-900 border-neutral-800">
+                <Card className="bg-neutral-900 border-neutral-700/50">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-medium text-neutral-200">Reference Content</CardTitle>
-                    <CardDescription className="text-xs text-neutral-500">
+                    <CardDescription className="text-xs text-neutral-400">
                       Paste a sample proposal or agreement. Used when Mirror Samples or Extract Logo is enabled.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <Textarea
                       placeholder="Paste a sample proposal, contract, or any reference content here..."
-                      className="min-h-[120px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none text-sm font-mono"
+                      className="min-h-[120px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-500 resize-none text-sm font-mono"
                       value={referenceContent}
                       onChange={(e) => setReferenceContent(e.target.value)}
                     />
@@ -325,7 +325,7 @@ export default function Home() {
                 )}
 
                 {isGenerating && !lastResult && (
-                  <Card className="bg-neutral-900 border-neutral-800">
+                  <Card className="bg-neutral-900 border-neutral-700/50">
                     <CardContent className="pt-6 flex items-center justify-center min-h-[300px]">
                       <div className="text-center space-y-3">
                         <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto" />
@@ -353,7 +353,7 @@ export default function Home() {
                     </div>
 
                     {lastResult.logoUrl && (
-                      <div className="flex items-center gap-2 p-3 bg-neutral-900 border border-neutral-800 rounded-lg">
+                      <div className="flex items-center gap-2 p-3 bg-neutral-900 border border-neutral-700/50 rounded-lg">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={lastResult.logoUrl}
@@ -361,13 +361,13 @@ export default function Home() {
                           className="h-10 object-contain max-w-[120px]"
                           onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
                         />
-                        <span className="text-xs text-neutral-500">Logo extracted from reference</span>
+                        <span className="text-xs text-neutral-400">Logo extracted from reference</span>
                       </div>
                     )}
 
-                    <Card className="bg-neutral-900 border-neutral-800">
+                    <Card className="bg-neutral-900 border-neutral-700/50">
                       <CardContent className="pt-4">
-                        <pre className="whitespace-pre-wrap text-sm text-neutral-200 font-sans leading-relaxed">
+                        <pre className="whitespace-pre-wrap text-sm text-neutral-100 font-sans leading-7">
                           {lastResult.text}
                         </pre>
                       </CardContent>
@@ -378,7 +378,7 @@ export default function Home() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+                          className="border-neutral-600 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors"
                           onClick={handleDownloadPdf}
                         >
                           <Download className="w-3 h-3 mr-1" />
@@ -389,7 +389,7 @@ export default function Home() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-green-700 text-green-400 hover:bg-green-900/20"
+                          className="border-green-600 text-green-400 hover:bg-green-900/30 hover:text-green-300 transition-colors"
                           onClick={() => window.open(lastResult.signableUrl!, "_blank")}
                         >
                           <Link className="w-3 h-3 mr-1" />
@@ -397,7 +397,7 @@ export default function Home() {
                         </Button>
                       )}
                       {config.tools.signableLink && !lastResult.signableUrl && (
-                        <span className="text-xs text-neutral-500 flex items-center gap-1">
+                        <span className="text-xs text-neutral-400 flex items-center gap-1">
                           <Link className="w-3 h-3" />
                           Signing link unavailable
                         </span>
@@ -406,11 +406,11 @@ export default function Home() {
 
                     <Separator className="bg-neutral-800" />
                     <div className="space-y-2">
-                      <p className="text-xs text-neutral-500">Refine or adjust the output:</p>
+                      <p className="text-xs text-neutral-400">Refine or adjust the output:</p>
                       <div className="flex gap-2">
                         <Textarea
                           placeholder="e.g. Make it shorter, add a payment milestone at 30 days, use more formal language..."
-                          className="min-h-[80px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none text-sm flex-1"
+                          className="min-h-[80px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-500 resize-none text-sm flex-1"
                           value={followUp}
                           onChange={(e) => setFollowUp(e.target.value)}
                         />
@@ -418,7 +418,7 @@ export default function Home() {
                           size="sm"
                           onClick={handleFollowUp}
                           disabled={isGenerating || !followUp.trim()}
-                          className="bg-violet-600 hover:bg-violet-700 text-white self-end"
+                          className="bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white self-end transition-colors disabled:opacity-40"
                         >
                           {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </Button>
@@ -427,7 +427,7 @@ export default function Home() {
 
                     {messages.length > 2 && (
                       <details className="group">
-                        <summary className="cursor-pointer text-xs text-neutral-500 flex items-center gap-1 select-none">
+                        <summary className="cursor-pointer text-xs text-neutral-400 flex items-center gap-1 select-none">
                           <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
                           {Math.floor(messages.length / 2)} prior exchange{messages.length > 3 ? "s" : ""}
                         </summary>
@@ -454,12 +454,12 @@ export default function Home() {
                 )}
 
                 {!lastResult && !isGenerating && (
-                  <Card className="bg-neutral-900 border-neutral-800 border-dashed">
+                  <Card className="bg-neutral-900 border-neutral-700/50 border-dashed">
                     <CardContent className="pt-6 flex items-center justify-center min-h-[300px]">
                       <div className="text-center space-y-2">
-                        <FileText className="w-8 h-8 text-neutral-700 mx-auto" />
-                        <p className="text-neutral-500 text-sm">Your generated proposal will appear here</p>
-                        <p className="text-neutral-600 text-xs">Configure your model and settings in the Config tab</p>
+                        <FileText className="w-8 h-8 text-neutral-600 mx-auto" />
+                        <p className="text-neutral-400 text-sm">Your generated proposal will appear here</p>
+                        <p className="text-neutral-500 text-xs">Configure your model and settings in the Config tab</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -471,10 +471,10 @@ export default function Home() {
           {/* TAB 2: CONFIG */}
           <TabsContent value="config" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-neutral-900 border-neutral-800">
+              <Card className="bg-neutral-900 border-neutral-700/50">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium text-neutral-200">Model Selection</CardTitle>
-                  <CardDescription className="text-xs text-neutral-500">
+                  <CardDescription className="text-xs text-neutral-400">
                     Compare cost and capability across providers. Prices shown per 1K tokens.
                   </CardDescription>
                 </CardHeader>
@@ -485,15 +485,15 @@ export default function Home() {
                       onClick={() => setConfig((c) => ({ ...c, model: model.id }))}
                       className={`w-full text-left p-3 rounded-lg border transition-all ${
                         config.model === model.id
-                          ? "border-violet-500 bg-violet-950/30"
-                          : "border-neutral-800 bg-neutral-950 hover:border-neutral-700"
+                          ? "border-violet-500/60 bg-violet-950/30 shadow-sm shadow-violet-500/10"
+                          : "border-neutral-700/40 bg-neutral-950 hover:border-neutral-600/60"
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div
                             className={`w-2 h-2 rounded-full ${
-                              config.model === model.id ? "bg-violet-400" : "bg-neutral-700"
+                              config.model === model.id ? "bg-violet-400" : "bg-neutral-600"
                             }`}
                           />
                           <span className="text-sm font-medium text-neutral-200">{model.name}</span>
@@ -512,17 +512,17 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
-                      <p className="text-xs text-neutral-500 mt-1 ml-4">{model.description}</p>
+                      <p className="text-xs text-neutral-400 mt-1 ml-4">{model.description}</p>
                     </button>
                   ))}
                 </CardContent>
               </Card>
 
               <div className="space-y-4">
-                <Card className="bg-neutral-900 border-neutral-800">
+                <Card className="bg-neutral-900 border-neutral-700/50">
                   <CardHeader>
                     <CardTitle className="text-sm font-medium text-neutral-200">System Prompt Style</CardTitle>
-                    <CardDescription className="text-xs text-neutral-500">
+                    <CardDescription className="text-xs text-neutral-400">
                       Controls the AI&apos;s personality and writing style for generation.
                     </CardDescription>
                   </CardHeader>
@@ -547,8 +547,8 @@ export default function Home() {
                     </Select>
 
                     {config.systemPromptStyle !== "custom" && (
-                      <div className="p-3 bg-neutral-950 rounded border border-neutral-800">
-                        <p className="text-xs text-neutral-500 line-clamp-4">
+                      <div className="p-3 bg-neutral-950 rounded border border-neutral-700/50">
+                        <p className="text-xs text-neutral-400 line-clamp-4">
                           {SYSTEM_PROMPT_PRESETS.find((p) => p.id === config.systemPromptStyle)?.prompt}
                         </p>
                       </div>
@@ -557,7 +557,7 @@ export default function Home() {
                     {config.systemPromptStyle === "custom" && (
                       <Textarea
                         placeholder="Write your own system prompt..."
-                        className="min-h-[120px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none text-sm"
+                        className="min-h-[120px] bg-neutral-950 border-neutral-700 text-neutral-100 placeholder:text-neutral-500 resize-none text-sm"
                         value={config.customSystemPrompt}
                         onChange={(e) => setConfig((c) => ({ ...c, customSystemPrompt: e.target.value }))}
                       />
@@ -565,10 +565,10 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-neutral-900 border-neutral-800">
+                <Card className="bg-neutral-900 border-neutral-700/50">
                   <CardHeader>
                     <CardTitle className="text-sm font-medium text-neutral-200">Tool Toggles</CardTitle>
-                    <CardDescription className="text-xs text-neutral-500">
+                    <CardDescription className="text-xs text-neutral-400">
                       Enable capabilities that affect how the document is generated and delivered.
                     </CardDescription>
                   </CardHeader>
@@ -602,7 +602,7 @@ export default function Home() {
                       <div key={tool.key} className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <p className={`text-sm font-medium ${tool.color}`}>{tool.label}</p>
-                          <p className="text-xs text-neutral-500 mt-0.5">{tool.description}</p>
+                          <p className="text-xs text-neutral-400 mt-0.5">{tool.description}</p>
                         </div>
                         <Switch
                           checked={config.tools[tool.key]}
@@ -648,11 +648,11 @@ export default function Home() {
                     color: "text-violet-400",
                   },
                 ].map((stat) => (
-                  <Card key={stat.label} className="bg-neutral-900 border-neutral-800">
+                  <Card key={stat.label} className="bg-neutral-900 border-neutral-700/50">
                     <CardContent className="pt-4">
                       <div className={`flex items-center gap-2 ${stat.color} mb-1`}>
                         {stat.icon}
-                        <span className="text-xs text-neutral-500">{stat.label}</span>
+                        <span className="text-xs text-neutral-400">{stat.label}</span>
                       </div>
                       <p className="text-xl font-semibold text-neutral-100">{stat.value}</p>
                     </CardContent>
@@ -662,7 +662,7 @@ export default function Home() {
             )}
 
             {lastResult && (
-              <Card className="bg-neutral-900 border-neutral-800">
+              <Card className="bg-neutral-900 border-neutral-700/50">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-neutral-200">Last Run — Tools Used</CardTitle>
                 </CardHeader>
@@ -675,7 +675,7 @@ export default function Home() {
                         className={
                           enabled
                             ? "bg-violet-500/20 text-violet-300 border-violet-500/30"
-                            : "text-neutral-600 border-neutral-700"
+                            : "text-neutral-500 border-neutral-700"
                         }
                       >
                         {enabled ? "✓" : "○"}{" "}
@@ -693,18 +693,18 @@ export default function Home() {
               </Card>
             )}
 
-            <Card className="bg-neutral-900 border-neutral-800">
+            <Card className="bg-neutral-900 border-neutral-700/50">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-sm font-medium text-neutral-200">Run History</CardTitle>
-                  <CardDescription className="text-xs text-neutral-500">
+                  <CardDescription className="text-xs text-neutral-400">
                     Compare performance across models, prompts, and tool configurations
                   </CardDescription>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-neutral-700 text-neutral-400 hover:bg-neutral-800"
+                  className="border-neutral-600 text-neutral-400 hover:bg-neutral-800 hover:text-white transition-colors"
                   onClick={loadRuns}
                   disabled={isLoadingRuns}
                 >
@@ -714,15 +714,15 @@ export default function Home() {
               <CardContent>
                 {runs.length === 0 ? (
                   <div className="text-center py-12">
-                    <BarChart3 className="w-8 h-8 text-neutral-700 mx-auto mb-2" />
-                    <p className="text-neutral-500 text-sm">No runs yet</p>
-                    <p className="text-neutral-600 text-xs mt-1">Generate a proposal to see analytics here</p>
+                    <BarChart3 className="w-8 h-8 text-neutral-600 mx-auto mb-2" />
+                    <p className="text-neutral-400 text-sm">No runs yet</p>
+                    <p className="text-neutral-500 text-xs mt-1">Generate a proposal to see analytics here</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-neutral-800 text-neutral-500">
+                        <tr className="border-b border-neutral-700/50 text-neutral-400">
                           <th className="text-left pb-2 pr-4 font-medium">Model</th>
                           <th className="text-left pb-2 pr-4 font-medium">Provider</th>
                           <th className="text-right pb-2 pr-4 font-medium">Latency</th>
@@ -733,7 +733,7 @@ export default function Home() {
                       </thead>
                       <tbody>
                         {runs.map((run) => (
-                          <tr key={run.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30">
+                          <tr key={run.id} className="border-b border-neutral-700/30 hover:bg-neutral-800/50 transition-colors">
                             <td className="py-2 pr-4 text-neutral-200 font-medium">{run.model}</td>
                             <td className="py-2 pr-4">
                               <Badge
@@ -762,11 +762,11 @@ export default function Home() {
                                     </Badge>
                                   ))
                                 ) : (
-                                  <span className="text-neutral-600">none</span>
+                                  <span className="text-neutral-500">none</span>
                                 )}
                               </div>
                             </td>
-                            <td className="py-2 text-neutral-500">
+                            <td className="py-2 text-neutral-400">
                               {new Date(run.created_at).toLocaleString("en-US", {
                                 month: "short",
                                 day: "numeric",
