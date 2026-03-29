@@ -90,7 +90,7 @@ export default function Home() {
   const [config, setConfig] = useState<Config>({
     model: "gpt-4o",
     systemPromptStyle: "professional",
-    customSystemPrompt: "",
+    customSystemPrompt: SYSTEM_PROMPT_PRESETS.find((p) => p.id === "professional")?.prompt ?? "",
     tools: {
       mirrorSamples: false,
       extractLogo: false,
@@ -561,7 +561,14 @@ export default function Home() {
                   <CardContent className="space-y-3">
                     <Select
                       value={config.systemPromptStyle}
-                      onValueChange={(v) => setConfig((c) => ({ ...c, systemPromptStyle: v ?? "professional" }))}
+                      onValueChange={(v) => {
+                        const preset = SYSTEM_PROMPT_PRESETS.find((p) => p.id === v)
+                        setConfig((c) => ({
+                          ...c,
+                          systemPromptStyle: v ?? "professional",
+                          customSystemPrompt: preset?.prompt ?? c.customSystemPrompt,
+                        }))
+                      }}
                     >
                       <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-800 hover:border-gray-300 transition-colors">
                         <SelectValue />
@@ -578,22 +585,12 @@ export default function Home() {
                       </SelectContent>
                     </Select>
 
-                    {config.systemPromptStyle !== "custom" && (
-                      <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                        <p className="text-xs text-gray-500 line-clamp-4 leading-relaxed">
-                          {SYSTEM_PROMPT_PRESETS.find((p) => p.id === config.systemPromptStyle)?.prompt}
-                        </p>
-                      </div>
-                    )}
-
-                    {config.systemPromptStyle === "custom" && (
-                      <Textarea
-                        placeholder="Write your own system prompt..."
-                        className="min-h-[120px] bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-none text-sm focus:border-violet-400 focus:ring-violet-200 transition-colors"
-                        value={config.customSystemPrompt}
-                        onChange={(e) => setConfig((c) => ({ ...c, customSystemPrompt: e.target.value }))}
-                      />
-                    )}
+                    <Textarea
+                      placeholder="Write your own system prompt..."
+                      className="min-h-[160px] bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-y text-sm leading-relaxed focus:border-violet-400 focus:ring-violet-200 transition-colors"
+                      value={config.customSystemPrompt}
+                      onChange={(e) => setConfig((c) => ({ ...c, systemPromptStyle: "custom", customSystemPrompt: e.target.value }))}
+                    />
                   </CardContent>
                 </Card>
 
