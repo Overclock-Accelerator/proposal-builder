@@ -27,7 +27,7 @@ export interface GenerateResult {
 function estimateCost(modelId: string, inputTokens: number, outputTokens: number): number {
   const model = MODELS.find((m) => m.id === modelId)
   if (!model) return 0
-  return (inputTokens / 1000) * model.inputPricePer1K + (outputTokens / 1000) * model.outputPricePer1K
+  return ((inputTokens + outputTokens) / 1_000_000) * model.approxPricePer1M
 }
 
 function getActiveToolDefs(enabledTools: string[]) {

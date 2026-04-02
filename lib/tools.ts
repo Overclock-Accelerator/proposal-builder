@@ -22,24 +22,6 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function' as const,
     function: {
-      name: 'enrich_company',
-      description:
-        'Fetch current information about a company including recent news, funding, products, team size, and key details. Use this when a client company name is mentioned in the proposal request so you can tailor the proposal with accurate, live data.',
-      parameters: {
-        type: 'object',
-        properties: {
-          company_name: {
-            type: 'string',
-            description: 'The name of the company to research',
-          },
-        },
-        required: ['company_name'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
       name: 'enrich_crm',
       description:
         'Log this proposal opportunity to the CRM database. Call this once you have enough context about the engagement — extract the company name and engagement type from the conversation. This records the lead in Notion.',
@@ -96,42 +78,21 @@ async function callSearchWeb(args: { query: string }): Promise<string> {
   return results.length > 0 ? results.join('\n\n') : 'No results found.'
 }
 
-async function callEnrichCompany(args: { company_name: string }): Promise<string> {
-  const res = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: process.env.TAVILY_API_KEY,
-      query: `${args.company_name} company overview funding products team recent news 2024 2025`,
-      search_depth: 'basic',
-      max_results: 5,
-    }),
-  })
-  if (!res.ok) throw new Error(`Tavily company search failed: ${res.statusText}`)
-  const data = await res.json()
-  const results = ((data.results ?? []) as Array<{ title: string; url: string; content: string }>)
-    .slice(0, 5)
-    .map((r) => `**${r.title}**\n${r.url}\n${r.content}`)
-  return results.length > 0
-    ? `Company intelligence for "${args.company_name}":\n\n${results.join('\n\n')}`
-    : `No company data found for "${args.company_name}".`
-}
+let cachedNotionDataSourceId: string | null = null
 
-let cachedNotionDbId: string | null = null
-
-async function getOrCreateNotionDb(): Promise<string> {
-  if (cachedNotionDbId) return cachedNotionDbId
+async function getOrCreateNotionDataSource(): Promise<string> {
+  if (cachedNotionDataSourceId) return cachedNotionDataSourceId
 
   const notion = new NotionClient({ auth: process.env.NOTION_API_KEY })
 
   const searchRes = await notion.search({
     query: 'Proposals CRM',
-    filter: { value: 'database', property: 'object' },
+    filter: { value: 'data_source', property: 'object' },
   })
 
   if (searchRes.results.length > 0) {
-    cachedNotionDbId = searchRes.results[0].id
-    return cachedNotionDbId
+    cachedNotionDataSourceId = searchRes.results[0].id
+    return cachedNotionDataSourceId
   }
 
   const pageSearch = await notion.search({
@@ -150,26 +111,33 @@ async function getOrCreateNotionDb(): Promise<string> {
   const db = await notion.databases.create({
     parent: { type: 'page_id', page_id: parentId },
     title: [{ type: 'text', text: { content: 'Proposals CRM' } }],
-    properties: {
-      Company: { title: {} },
-      'Engagement Type': { rich_text: {} },
-      Budget: { rich_text: {} },
-      Notes: { rich_text: {} },
-      Status: {
-        select: {
-          options: [
-            { name: 'Lead', color: 'blue' },
-            { name: 'Proposal Sent', color: 'yellow' },
-            { name: 'Closed', color: 'green' },
-          ],
+    initial_data_source: {
+      properties: {
+        Company: { title: {} },
+        'Engagement Type': { rich_text: {} },
+        Budget: { rich_text: {} },
+        Notes: { rich_text: {} },
+        Status: {
+          select: {
+            options: [
+              { name: 'Lead', color: 'blue' },
+              { name: 'Proposal Sent', color: 'yellow' },
+              { name: 'Closed', color: 'green' },
+            ],
+          },
         },
+        Created: { date: {} },
       },
-      Created: { date: {} },
     },
   })
 
-  cachedNotionDbId = db.id
-  return cachedNotionDbId
+  const dataSourceId = 'data_sources' in db ? db.data_sources[0]?.id : undefined
+  if (!dataSourceId) {
+    throw new Error('Proposals CRM was created in Notion, but no data source ID was returned.')
+  }
+
+  cachedNotionDataSourceId = dataSourceId
+  return dataSourceId
 }
 
 async function callEnrichCrm(args: {
@@ -179,10 +147,10 @@ async function callEnrichCrm(args: {
   notes?: string
 }): Promise<string> {
   const notion = new NotionClient({ auth: process.env.NOTION_API_KEY })
-  const dbId = await getOrCreateNotionDb()
+  const dataSourceId = await getOrCreateNotionDataSource()
 
   await notion.pages.create({
-    parent: { database_id: dbId },
+    parent: { data_source_id: dataSourceId },
     properties: {
       Company: {
         title: [{ text: { content: args.company_name } }],
@@ -216,9 +184,6 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     switch (name) {
       case 'search_web':
         result = await callSearchWeb(args as { query: string })
-        break
-      case 'enrich_company':
-        result = await callEnrichCompany(args as { company_name: string })
         break
       case 'enrich_crm':
         result = await callEnrichCrm(
