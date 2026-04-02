@@ -411,6 +411,15 @@ function formatModelPrice(pricePer1M: number): string {
   return `$${pricePer1M.toFixed(2)}/1M`
 }
 
+function getNotionPageUrl(toolCallLog: ToolResult[]): string | null {
+  const enrichResult = [...toolCallLog]
+    .reverse()
+    .find((toolCall) => toolCall.toolName === "enrich_crm" && !toolCall.result.startsWith("Tool error:"))
+
+  const notionPageUrl = enrichResult?.meta?.notionPageUrl
+  return typeof notionPageUrl === "string" && notionPageUrl.length > 0 ? notionPageUrl : null
+}
+
 function MarkdownPreview({ content }: { content: string }) {
   return (
     <div className="space-y-4 text-[14px] leading-7 text-foreground">
@@ -691,6 +700,7 @@ export default function Home() {
 
   const currentModel = MODELS.find((m) => m.id === config.model)
   const activeFunctionTools = lastResult?.toolCallLog ?? []
+  const notionPageUrl = getNotionPageUrl(activeFunctionTools)
   const totalContextCharacters = contextFiles.reduce((total, file) => total + file.content.length, 0)
 
   return (
@@ -1048,6 +1058,16 @@ export default function Home() {
                         <Download className="w-3.5 h-3.5 mr-1.5" />
                         Download DOCX
                       </Button>
+                      {notionPageUrl && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(notionPageUrl, "_blank", "noopener,noreferrer")}
+                        >
+                          <FileText className="w-3.5 h-3.5 mr-1.5" />
+                          Open Notion Page
+                        </Button>
+                      )}
                     </div>
 
                     <Separator />

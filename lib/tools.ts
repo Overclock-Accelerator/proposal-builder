@@ -56,6 +56,7 @@ export interface ToolResult {
   toolName: string
   args: Record<string, unknown>
   result: string
+  meta?: Record<string, unknown>
   durationMs: number
 }
 
@@ -145,11 +146,11 @@ async function callEnrichCrm(args: {
   engagement_type: string
   budget_estimate?: string
   notes?: string
-}): Promise<string> {
+}): Promise<{ result: string; meta?: Record<string, unknown> }> {
   const notion = new NotionClient({ auth: process.env.NOTION_API_KEY })
   const dataSourceId = await getOrCreateNotionDataSource()
 
-  await notion.pages.create({
+  const createdPage = await notion.pages.create({
     parent: { data_source_id: dataSourceId },
     properties: {
       Company: {
@@ -173,20 +174,26 @@ async function callEnrichCrm(args: {
     },
   })
 
-  return `CRM record created for "${args.company_name}" — ${args.engagement_type}${args.budget_estimate ? ` (${args.budget_estimate})` : ''}. Logged as a Lead in Proposals CRM (Notion).`
+  return {
+    result: `CRM record created for "${args.company_name}" — ${args.engagement_type}${args.budget_estimate ? ` (${args.budget_estimate})` : ''}. Logged as a Lead in Proposals CRM (Notion).`,
+    meta: {
+      notionPageUrl: `https://www.notion.so/${createdPage.id.replace(/-/g, '')}`,
+    },
+  }
 }
 
 export async function executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
   const start = Date.now()
   let result: string
+  let meta: Record<string, unknown> | undefined
 
   try {
     switch (name) {
       case 'search_web':
         result = await callSearchWeb(args as { query: string })
         break
-      case 'enrich_crm':
-        result = await callEnrichCrm(
+      case 'enrich_crm': {
+        const crmResult = await callEnrichCrm(
           args as {
             company_name: string
             engagement_type: string
@@ -194,7 +201,10 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
             notes?: string
           }
         )
+        result = crmResult.result
+        meta = crmResult.meta
         break
+      }
       default:
         result = `Unknown tool: ${name}`
     }
@@ -202,5 +212,5 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     result = `Tool error: ${e instanceof Error ? e.message : String(e)}`
   }
 
-  return { toolName: name, args, result, durationMs: Date.now() - start }
+  return { toolName: name, args, result, meta, durationMs: Date.now() - start }
 }
