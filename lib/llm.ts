@@ -1,7 +1,6 @@
 import OpenAI from 'openai'
-import Anthropic from '@anthropic-ai/sdk'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { MODELS } from './models'
+import { TOOL_DEFINITIONS, ToolResult, executeTool } from './tools'
 
 export interface Message {
   role: 'user' | 'assistant'
@@ -12,8 +11,8 @@ export interface GenerateOptions {
   model: string
   systemPrompt: string
   messages: Message[]
-  mirrorSamples?: boolean
-  referenceContent?: string
+  enabledTools?: string[]
+  onToolCall?: (log: ToolResult) => void
 }
 
 export interface GenerateResult {
@@ -22,6 +21,7 @@ export interface GenerateResult {
   estimatedCostUsd: number
   inputTokens: number
   outputTokens: number
+  toolCallLog: ToolResult[]
 }
 
 function estimateCost(modelId: string, inputTokens: number, outputTokens: number): number {
@@ -30,109 +30,109 @@ function estimateCost(modelId: string, inputTokens: number, outputTokens: number
   return (inputTokens / 1000) * model.inputPricePer1K + (outputTokens / 1000) * model.outputPricePer1K
 }
 
+function getActiveToolDefs(enabledTools: string[]) {
+  return TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name))
+}
+
+function getOpenRouterClient() {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured')
+  }
+
+  return new OpenAI({
+    apiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: {
+      'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://proposal-builder.vercel.app',
+      'X-OpenRouter-Title': process.env.OPENROUTER_APP_NAME ?? 'Proposal Builder',
+    },
+  })
+}
+
 export async function generate(options: GenerateOptions): Promise<GenerateResult> {
-  const { model: modelId, systemPrompt, messages, mirrorSamples, referenceContent } = options
+  const { model: modelId, systemPrompt, messages, enabledTools = [], onToolCall } = options
   const modelConfig = MODELS.find((m) => m.id === modelId)
   if (!modelConfig) throw new Error(`Unknown model: ${modelId}`)
-
-  let finalSystemPrompt = systemPrompt
-  if (mirrorSamples && referenceContent) {
-    finalSystemPrompt += `\n\n---\nREFERENCE CONTENT (mirror this style and structure):\n${referenceContent}\n---`
+  if (modelConfig.provider !== 'openrouter') {
+    throw new Error(`Unsupported provider: ${modelConfig.provider}`)
   }
 
+  const toolCallLog: ToolResult[] = []
   const start = Date.now()
+  const activeTools = getActiveToolDefs(enabledTools)
+  const client = getOpenRouterClient()
+  const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...messages,
+  ]
 
-  if (modelConfig.provider === 'openai') {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    const response = await client.chat.completions.create({
+  let totalInputTokens = 0
+  let totalOutputTokens = 0
+  const MAX_TOOL_ROUNDS = 5
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const reqParams: OpenAI.Chat.ChatCompletionCreateParams = {
       model: modelId,
-      messages: [{ role: 'system', content: finalSystemPrompt }, ...messages],
+      messages: chatMessages,
       max_tokens: 4096,
-    })
+    }
+
+    if (activeTools.length > 0) {
+      reqParams.tools = activeTools
+      reqParams.tool_choice = 'auto'
+    }
+
+    const response = await client.chat.completions.create(reqParams)
+    totalInputTokens += response.usage?.prompt_tokens ?? 0
+    totalOutputTokens += response.usage?.completion_tokens ?? 0
+
+    const choice = response.choices[0]
+
+    if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+      chatMessages.push(choice.message)
+      const toolResults: OpenAI.Chat.ChatCompletionToolMessageParam[] = []
+
+      for (const tc of choice.message.tool_calls) {
+        let parsedArgs: Record<string, unknown> = {}
+        try {
+          parsedArgs = JSON.parse(tc.function.arguments)
+        } catch {
+          // Leave empty so the tool can surface a validation error cleanly.
+        }
+
+        const toolResult = await executeTool(tc.function.name, parsedArgs)
+        toolCallLog.push(toolResult)
+        onToolCall?.(toolResult)
+        toolResults.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: toolResult.result,
+        })
+      }
+
+      chatMessages.push(...toolResults)
+      continue
+    }
+
     const latencyMs = Date.now() - start
-    const inputTokens = response.usage?.prompt_tokens ?? 0
-    const outputTokens = response.usage?.completion_tokens ?? 0
     return {
-      text: response.choices[0].message.content ?? '',
+      text: choice.message.content ?? '',
       latencyMs,
-      estimatedCostUsd: estimateCost(modelId, inputTokens, outputTokens),
-      inputTokens,
-      outputTokens,
+      estimatedCostUsd: estimateCost(modelId, totalInputTokens, totalOutputTokens),
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      toolCallLog,
     }
   }
 
-  if (modelConfig.provider === 'anthropic') {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const response = await client.messages.create({
-      model: modelId,
-      max_tokens: 4096,
-      system: finalSystemPrompt,
-      messages: messages as Anthropic.MessageParam[],
-    })
-    const latencyMs = Date.now() - start
-    const inputTokens = response.usage.input_tokens
-    const outputTokens = response.usage.output_tokens
-    return {
-      text: response.content[0].type === 'text' ? response.content[0].text : '',
-      latencyMs,
-      estimatedCostUsd: estimateCost(modelId, inputTokens, outputTokens),
-      inputTokens,
-      outputTokens,
-    }
+  const latencyMs = Date.now() - start
+  return {
+    text: '',
+    latencyMs,
+    estimatedCostUsd: estimateCost(modelId, totalInputTokens, totalOutputTokens),
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    toolCallLog,
   }
-
-  if (modelConfig.provider === 'gemini') {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-    const geminiModel = genAI.getGenerativeModel({
-      model: modelId,
-      systemInstruction: finalSystemPrompt,
-    })
-    const history = messages.slice(0, -1).map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }))
-    const lastMessage = messages[messages.length - 1]
-    const chat = geminiModel.startChat({ history })
-    const result = await chat.sendMessage(lastMessage.content)
-    const latencyMs = Date.now() - start
-    const text = result.response.text()
-    // Gemini doesn't always return token counts in the same way; estimate from chars
-    const inputTokens = Math.ceil(messages.map((m) => m.content).join('').length / 4)
-    const outputTokens = Math.ceil(text.length / 4)
-    return {
-      text,
-      latencyMs,
-      estimatedCostUsd: estimateCost(modelId, inputTokens, outputTokens),
-      inputTokens,
-      outputTokens,
-    }
-  }
-
-  if (modelConfig.provider === 'openrouter') {
-    const client = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-      defaultHeaders: {
-        'HTTP-Referer': 'https://proposal-builder.vercel.app',
-        'X-Title': 'Proposal Builder',
-      },
-    })
-    const response = await client.chat.completions.create({
-      model: modelId,
-      messages: [{ role: 'system', content: finalSystemPrompt }, ...messages],
-      max_tokens: 4096,
-    })
-    const latencyMs = Date.now() - start
-    const inputTokens = response.usage?.prompt_tokens ?? 0
-    const outputTokens = response.usage?.completion_tokens ?? 0
-    return {
-      text: response.choices[0].message.content ?? '',
-      latencyMs,
-      estimatedCostUsd: estimateCost(modelId, inputTokens, outputTokens),
-      inputTokens,
-      outputTokens,
-    }
-  }
-
-  throw new Error(`Unsupported provider: ${modelConfig.provider}`)
 }

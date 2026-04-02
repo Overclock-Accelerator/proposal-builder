@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { MODELS, SYSTEM_PROMPT_PRESETS } from "@/lib/models"
 import type { Message } from "@/lib/llm"
+import type { ToolResult } from "@/lib/tools"
 import type { Run } from "@/lib/db"
 import {
   Loader2,
@@ -19,15 +20,13 @@ import {
   BarChart3,
   Send,
   Download,
-  Link,
   RefreshCw,
   Zap,
   DollarSign,
   Clock,
   ChevronDown,
   Sparkles,
-  Gauge,
-  Rocket,
+  Code2,
 } from "lucide-react"
 
 interface RunResult {
@@ -36,9 +35,8 @@ interface RunResult {
   estimatedCostUsd: number
   inputTokens: number
   outputTokens: number
-  signableUrl: string | null
-  logoUrl: string | null
   runId: string
+  toolCallLog: ToolResult[]
 }
 
 interface Config {
@@ -46,32 +44,36 @@ interface Config {
   systemPromptStyle: string
   customSystemPrompt: string
   tools: {
-    mirrorSamples: boolean
-    extractLogo: boolean
-    signableLink: boolean
-    downloadPdf: boolean
+    searchWeb: boolean
+    enrichCompany: boolean
+    enrichCrm: boolean
   }
 }
 
-const PROVIDER_COLORS: Record<string, string> = {
-  openai: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  anthropic: "bg-amber-50 text-amber-700 border-amber-200",
-  gemini: "bg-sky-50 text-sky-700 border-sky-200",
-  openrouter: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
-}
-
 const PROVIDER_LABELS: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  gemini: "Google",
   openrouter: "OpenRouter",
 }
 
-const CATEGORY_STYLES: Record<string, { icon: typeof Zap; label: string; className: string }> = {
-  fast: { icon: Rocket, label: "Fast", className: "bg-sky-50 text-sky-600 border-sky-200" },
-  performant: { icon: Gauge, label: "Performant", className: "bg-violet-50 text-violet-600 border-violet-200" },
-  both: { icon: Sparkles, label: "Fast & Performant", className: "bg-indigo-50 text-indigo-600 border-indigo-200" },
+const CATEGORY_LABELS: Record<string, string> = {
+  fast: "Fast",
+  performant: "Performant",
+  both: "Fast & Performant",
 }
+
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  searchWeb: "Search Web",
+  enrichCompany: "Enrich Company",
+  enrichCrm: "Enrich CRM",
+}
+
+const SAMPLE_ENGAGEMENT_PROMPTS = [
+  "Draft a consulting proposal for a 6-week AI workflow audit for Northstar CRM, a B2B SaaS company. Budget is $18,000. Deliverables include stakeholder interviews, process mapping, automation opportunities, and a final recommendations workshop.",
+  "Create a proposal for a 3-month growth strategy engagement for LedgerLoop, an early-stage fintech startup. Budget is $35,000. Scope includes market positioning, KPI design, pricing experiments, and biweekly advisory sessions.",
+  "Generate a consulting agreement for a cybersecurity readiness assessment for Harbor Health Network, a regional healthcare organization. Timeline is 8 weeks with a $42,000 budget. Deliverables include risk review, compliance gap analysis, remediation roadmap, and executive briefing.",
+  "Write a proposal for a product analytics implementation for Alder & Ash, an ecommerce brand preparing for a holiday launch. Budget is $22,500 over 5 weeks. Deliverables include event taxonomy, dashboard setup, QA, and team training.",
+  "Prepare a consulting proposal for a fractional CTO engagement with FleetForge Logistics. This is a 2-month engagement at $28,000 covering architecture review, vendor evaluation, engineering planning, and weekly leadership calls.",
+  "Create a proposal for a brand messaging and website conversion audit for Verdant Grid, a climate tech company. Timeline is 4 weeks and budget is $12,000. Deliverables include homepage copy recommendations, messaging framework, and conversion experiments.",
+] as const
 
 function formatCost(usd: number): string {
   if (usd === 0) return "Free"
@@ -88,19 +90,17 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("builder")
 
   const [config, setConfig] = useState<Config>({
-    model: "gpt-4o",
+    model: "anthropic/claude-sonnet-4.5",
     systemPromptStyle: "professional",
     customSystemPrompt: SYSTEM_PROMPT_PRESETS.find((p) => p.id === "professional")?.prompt ?? "",
     tools: {
-      mirrorSamples: false,
-      extractLogo: false,
-      signableLink: false,
-      downloadPdf: false,
+      searchWeb: false,
+      enrichCompany: false,
+      enrichCrm: false,
     },
   })
 
   const [prompt, setPrompt] = useState("")
-  const [referenceContent, setReferenceContent] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [followUp, setFollowUp] = useState("")
   const [lastResult, setLastResult] = useState<RunResult | null>(null)
@@ -125,14 +125,12 @@ export default function Home() {
             systemPromptStyle: config.systemPromptStyle,
             customSystemPrompt: config.customSystemPrompt,
             messages: msgs,
-            mirrorSamples: config.tools.mirrorSamples,
-            referenceContent,
             tools: config.tools,
           }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || "Generation failed")
-        setLastResult(data)
+        setLastResult({ ...data, toolCallLog: data.toolCallLog ?? [] })
         setMessages([...msgs, { role: "assistant", content: data.text }])
         setTimeout(() => outputRef.current?.scrollIntoView({ behavior: "smooth" }), 100)
         return data
@@ -143,13 +141,21 @@ export default function Home() {
         setIsGenerating(false)
       }
     },
-    [config, referenceContent]
+    [config]
   )
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return
     const msgs: Message[] = [{ role: "user", content: prompt }]
     await callGenerate(msgs)
+  }
+
+  const handleRandomPrompt = () => {
+    const nextPrompt =
+      SAMPLE_ENGAGEMENT_PROMPTS[Math.floor(Math.random() * SAMPLE_ENGAGEMENT_PROMPTS.length)]
+
+    setPrompt(nextPrompt)
+    setError(null)
   }
 
   const handleFollowUp = async () => {
@@ -194,42 +200,33 @@ export default function Home() {
   }
 
   const currentModel = MODELS.find((m) => m.id === config.model)
+  const activeFunctionTools = lastResult?.toolCallLog ?? []
 
   return (
-    <div className="min-h-screen bg-[#fafafa]">
-      {/* Top accent gradient */}
-      <div className="fixed inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-500 z-20" />
-
-      <header className="border-b border-gray-200 bg-white/80 backdrop-blur-xl sticky top-0 z-10">
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border bg-background sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/20">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-9 h-9 bg-foreground flex items-center justify-center shrink-0">
+              <span className="font-heading text-background text-base font-bold leading-none">P</span>
             </div>
             <div>
-              <h1 className="font-semibold text-gray-900 text-base tracking-tight">Proposal Builder</h1>
-              <p className="text-[13px] text-gray-500">Overclock Accelerator</p>
+              <h1 className="font-heading text-lg font-bold leading-none tracking-[0.01em] text-foreground">Proposal Builder</h1>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-widest">Overclock Accelerator</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {currentModel && (
               <>
-                <Badge variant="outline" className={`text-xs ${PROVIDER_COLORS[currentModel.provider]}`}>
+                <Badge variant="outline" className="text-xs text-muted-foreground border-border">
                   {PROVIDER_LABELS[currentModel.provider]} · {currentModel.name}
                 </Badge>
-                {(() => {
-                  const cat = CATEGORY_STYLES[currentModel.category]
-                  const CatIcon = cat.icon
-                  return (
-                    <Badge variant="outline" className={`text-xs ${cat.className}`}>
-                      <CatIcon className="w-3 h-3 mr-1" />
-                      {cat.label}
-                    </Badge>
-                  )
-                })()}
+                <Badge variant="outline" className="text-xs text-muted-foreground border-border">
+                  {CATEGORY_LABELS[currentModel.category]}
+                </Badge>
               </>
             )}
-            <Badge variant="outline" className="text-xs text-gray-500 border-gray-200 bg-gray-50">
+            <Badge variant="outline" className="text-xs text-muted-foreground border-border">
               {currentModel?.inputPricePer1K === 0 ? "Free tier" : `$${currentModel?.inputPricePer1K}/1K in`}
             </Badge>
           </div>
@@ -238,16 +235,19 @@ export default function Home() {
 
       <main className="max-w-6xl mx-auto px-6 py-10">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid w-full grid-cols-3 mb-10 bg-gray-100/80 border border-gray-200 p-1 rounded-xl">
-            <TabsTrigger value="builder" className="flex items-center gap-2 text-gray-500 rounded-lg data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm transition-all">
+          <TabsList
+            variant="line"
+            className="w-full border-b border-border mb-10 p-0 h-auto rounded-none justify-start gap-0"
+          >
+            <TabsTrigger value="builder" className="px-5 py-3 text-sm gap-2 rounded-none border-0">
               <FileText className="w-4 h-4" />
               Proposal Builder
             </TabsTrigger>
-            <TabsTrigger value="config" className="flex items-center gap-2 text-gray-500 rounded-lg data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm transition-all">
+            <TabsTrigger value="config" className="px-5 py-3 text-sm gap-2 rounded-none border-0">
               <Settings className="w-4 h-4" />
               Configuration
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2 text-gray-500 rounded-lg data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm transition-all">
+            <TabsTrigger value="analytics" className="px-5 py-3 text-sm gap-2 rounded-none border-0">
               <BarChart3 className="w-4 h-4" />
               Run Analytics
             </TabsTrigger>
@@ -257,79 +257,62 @@ export default function Home() {
           <TabsContent value="builder" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="space-y-5">
-                <Card className="bg-white border-gray-200 shadow-sm">
+                <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">Describe Your Engagement</CardTitle>
-                    <CardDescription className="text-[13px] text-gray-500 leading-relaxed">
+                    <CardTitle className="text-base">Describe Your Engagement</CardTitle>
+                    <CardDescription className="text-[13px] leading-relaxed">
                       Tell the AI what kind of consulting work this covers. Include client, deliverables, timeline, budget.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <Textarea
                       placeholder="e.g. I need a consulting agreement for a 3-month data analytics engagement with a mid-size fintech company. Budget is $25,000. Deliverables include a data pipeline audit, recommendations report, and 2 strategy sessions..."
-                      className="min-h-[180px] bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-none text-sm leading-relaxed focus:border-violet-400 focus:ring-violet-200 transition-colors"
+                      className="min-h-[180px] resize-none text-sm leading-relaxed"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                     />
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={isGenerating || !prompt.trim()}
-                      className="w-full h-10 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium shadow-lg shadow-violet-500/20 transition-all disabled:opacity-30 disabled:shadow-none"
-                    >
-                      {isGenerating ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Generating with {currentModel?.name}...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-4 h-4 mr-2" />
-                          Generate Proposal
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-gray-200 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">Reference Content</CardTitle>
-                    <CardDescription className="text-[13px] text-gray-500 leading-relaxed">
-                      Paste a sample proposal or agreement. Used when Mirror Samples or Extract Logo is enabled.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Textarea
-                      placeholder="Paste a sample proposal, contract, or any reference content here..."
-                      className="min-h-[140px] bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-none text-sm font-mono leading-relaxed focus:border-violet-400 focus:ring-violet-200 transition-colors"
-                      value={referenceContent}
-                      onChange={(e) => setReferenceContent(e.target.value)}
-                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleRandomPrompt}
+                        disabled={isGenerating}
+                        className="h-10 sm:w-auto"
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Random Demo Prompt
+                      </Button>
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={isGenerating || !prompt.trim()}
+                        className="h-10 flex-1 bg-foreground text-background hover:bg-foreground/90 font-medium transition-all disabled:opacity-30"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Generating with {currentModel?.name}...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" />
+                            Generate Proposal
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
 
                 {Object.values(config.tools).some(Boolean) && (
                   <div className="flex flex-wrap gap-2">
-                    {config.tools.mirrorSamples && (
-                      <Badge variant="secondary" className="text-xs bg-violet-50 text-violet-700 border border-violet-200">
-                        Mirror Samples
-                      </Badge>
-                    )}
-                    {config.tools.extractLogo && (
-                      <Badge variant="secondary" className="text-xs bg-sky-50 text-sky-700 border border-sky-200">
-                        Extract Logo
-                      </Badge>
-                    )}
-                    {config.tools.signableLink && (
-                      <Badge variant="secondary" className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Signable Link
-                      </Badge>
-                    )}
-                    {config.tools.downloadPdf && (
-                      <Badge variant="secondary" className="text-xs bg-amber-50 text-amber-700 border border-amber-200">
-                        PDF Export
-                      </Badge>
-                    )}
+                    {(Object.entries(config.tools) as [keyof Config["tools"], boolean][])
+                      .filter(([, enabled]) => enabled)
+                      .map(([key]) => (
+                        <Badge key={key} variant="outline" className="text-xs border-blue-300 text-blue-700 bg-blue-50">
+                          <Code2 className="w-3 h-3 mr-1" />
+                          {TOOL_DISPLAY_NAMES[key]}
+                        </Badge>
+                      ))}
                   </div>
                 )}
               </div>
@@ -344,11 +327,11 @@ export default function Home() {
                 )}
 
                 {isGenerating && !lastResult && (
-                  <Card className="bg-white border-gray-200 shadow-sm">
+                  <Card>
                     <CardContent className="pt-6 flex items-center justify-center min-h-[300px]">
                       <div className="text-center space-y-4">
-                        <Loader2 className="w-8 h-8 animate-spin text-violet-500 mx-auto" />
-                        <p className="text-gray-500 text-sm">Generating with {currentModel?.name}...</p>
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
+                        <p className="text-muted-foreground text-sm">Generating with {currentModel?.name}...</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -357,79 +340,75 @@ export default function Home() {
                 {lastResult && (
                   <>
                     <div className="flex items-center gap-5 text-xs">
-                      <span className="flex items-center gap-1.5 text-gray-500">
-                        <Clock className="w-3.5 h-3.5 text-sky-500" />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
                         {formatLatency(lastResult.latencyMs)}
                       </span>
-                      <span className="flex items-center gap-1.5 text-gray-500">
-                        <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <DollarSign className="w-3.5 h-3.5" />
                         {formatCost(lastResult.estimatedCostUsd)}
                       </span>
-                      <span className="flex items-center gap-1.5 text-gray-500">
-                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Zap className="w-3.5 h-3.5" />
                         {lastResult.inputTokens + lastResult.outputTokens} tokens
                       </span>
+                      {activeFunctionTools.length > 0 && (
+                        <span className="flex items-center gap-1.5 text-blue-600">
+                          <Code2 className="w-3.5 h-3.5" />
+                          {activeFunctionTools.length} tool call{activeFunctionTools.length > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
 
-                    {lastResult.logoUrl && (
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={lastResult.logoUrl}
-                          alt="Extracted logo"
-                          className="h-10 object-contain max-w-[120px]"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
-                        />
-                        <span className="text-xs text-gray-500">Logo extracted from reference</span>
-                      </div>
+                    {activeFunctionTools.length > 0 && (
+                      <Card className="border-blue-200 bg-blue-50/40">
+                        <CardHeader className="pb-2 pt-4">
+                          <CardTitle className="text-sm flex items-center gap-2 text-blue-800">
+                            <Code2 className="w-4 h-4" />
+                            Tool Call Log — LLM invoked {activeFunctionTools.length} function{activeFunctionTools.length > 1 ? "s" : ""}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pb-4">
+                          {activeFunctionTools.map((call, i) => (
+                            <div key={i} className="bg-white border border-blue-100 p-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-mono font-semibold text-blue-700">{call.toolName}()</span>
+                                <span className="text-[10px] text-muted-foreground">{call.durationMs}ms</span>
+                              </div>
+                              <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 p-2 overflow-x-auto">
+                                {JSON.stringify(call.args, null, 2)}
+                              </div>
+                              <p className="text-[12px] text-foreground/80 leading-relaxed line-clamp-3">
+                                {call.result}
+                              </p>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
                     )}
 
-                    <Card className="bg-white border-gray-200 shadow-sm">
+                    <Card>
                       <CardContent className="pt-5 pb-5">
-                        <pre className="whitespace-pre-wrap text-[14px] text-gray-800 font-sans leading-7">
+                        <pre className="whitespace-pre-wrap text-[14px] font-sans leading-7">
                           {lastResult.text}
                         </pre>
                       </CardContent>
                     </Card>
 
                     <div className="flex flex-wrap gap-2">
-                      {config.tools.downloadPdf && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-gray-200 text-gray-600 bg-white hover:bg-gray-50 hover:text-gray-900 transition-all"
-                          onClick={handleDownloadPdf}
-                        >
-                          <Download className="w-3.5 h-3.5 mr-1.5" />
-                          Download PDF
-                        </Button>
-                      )}
-                      {lastResult.signableUrl && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700 transition-all"
-                          onClick={() => window.open(lastResult.signableUrl!, "_blank")}
-                        >
-                          <Link className="w-3.5 h-3.5 mr-1.5" />
-                          Sign Document
-                        </Button>
-                      )}
-                      {config.tools.signableLink && !lastResult.signableUrl && (
-                        <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                          <Link className="w-3.5 h-3.5" />
-                          Signing link unavailable
-                        </span>
-                      )}
+                      <Button size="sm" variant="outline" onClick={handleDownloadPdf}>
+                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                        Download PDF
+                      </Button>
                     </div>
 
-                    <Separator className="bg-gray-200" />
+                    <Separator />
                     <div className="space-y-3">
-                      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Refine output</p>
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Refine output</p>
                       <div className="flex gap-3">
                         <Textarea
                           placeholder="e.g. Make it shorter, add a payment milestone at 30 days, use more formal language..."
-                          className="min-h-[80px] bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-none text-sm flex-1 focus:border-violet-400 focus:ring-violet-200 transition-colors"
+                          className="min-h-[80px] resize-none text-sm flex-1"
                           value={followUp}
                           onChange={(e) => setFollowUp(e.target.value)}
                         />
@@ -437,7 +416,7 @@ export default function Home() {
                           size="sm"
                           onClick={handleFollowUp}
                           disabled={isGenerating || !followUp.trim()}
-                          className="bg-violet-600 hover:bg-violet-500 text-white self-end transition-all disabled:opacity-30"
+                          className="bg-foreground text-background hover:bg-foreground/90 self-end transition-all disabled:opacity-30"
                         >
                           {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </Button>
@@ -446,7 +425,7 @@ export default function Home() {
 
                     {messages.length > 2 && (
                       <details className="group">
-                        <summary className="cursor-pointer text-xs text-gray-400 flex items-center gap-1.5 select-none hover:text-gray-600 transition-colors">
+                        <summary className="cursor-pointer text-xs text-muted-foreground flex items-center gap-1.5 select-none hover:text-foreground transition-colors">
                           <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
                           {Math.floor(messages.length / 2)} prior exchange{messages.length > 3 ? "s" : ""}
                         </summary>
@@ -454,13 +433,13 @@ export default function Home() {
                           {messages.slice(0, -2).map((msg, i) => (
                             <div
                               key={i}
-                              className={`text-xs p-3 rounded-lg ${
+                              className={`text-xs p-3 border ${
                                 msg.role === "user"
-                                  ? "bg-violet-50 text-violet-700 border border-violet-100"
-                                  : "bg-gray-50 text-gray-600 border border-gray-100"
+                                  ? "border-foreground/20 bg-foreground/5"
+                                  : "border-border bg-muted/30"
                               }`}
                             >
-                              <span className="font-medium uppercase text-[10px] tracking-wider opacity-60">
+                              <span className="font-medium uppercase text-[10px] tracking-wider opacity-50">
                                 {msg.role}
                               </span>
                               <p className="mt-1 line-clamp-3">{msg.content}</p>
@@ -473,14 +452,14 @@ export default function Home() {
                 )}
 
                 {!lastResult && !isGenerating && (
-                  <Card className="bg-gray-50/50 border-gray-200 border-dashed shadow-none">
+                  <Card className="border-dashed">
                     <CardContent className="pt-6 flex items-center justify-center min-h-[300px]">
                       <div className="text-center space-y-3">
-                        <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
-                          <FileText className="w-6 h-6 text-gray-400" />
+                        <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto">
+                          <FileText className="w-6 h-6 text-muted-foreground" />
                         </div>
-                        <p className="text-gray-500 text-sm font-medium">Your generated proposal will appear here</p>
-                        <p className="text-gray-400 text-xs">Configure your model and settings in the Config tab</p>
+                        <p className="text-muted-foreground text-sm font-medium">Your generated proposal will appear here</p>
+                        <p className="text-muted-foreground/60 text-xs">Configure your model and AI tools in the Config tab</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -492,69 +471,58 @@ export default function Home() {
           {/* TAB 2: CONFIG */}
           <TabsContent value="config" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <Card className="bg-white border-gray-200 shadow-sm">
+              <Card>
                 <CardHeader>
-                  <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">Model Selection</CardTitle>
-                  <CardDescription className="text-[13px] text-gray-500 leading-relaxed">
-                    Compare cost and capability across providers. Prices shown per 1K tokens.
+                  <CardTitle className="text-base">Model Selection</CardTitle>
+                  <CardDescription className="text-[13px] leading-relaxed">
+                    Every request runs through OpenRouter. Choose the underlying model and compare pricing per 1K tokens.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {MODELS.map((model) => {
-                    const cat = CATEGORY_STYLES[model.category]
-                    const CatIcon = cat.icon
-                    return (
-                      <button
-                        key={model.id}
-                        onClick={() => setConfig((c) => ({ ...c, model: model.id }))}
-                        className={`w-full text-left p-4 rounded-xl border transition-all ${
-                          config.model === model.id
-                            ? "border-violet-300 bg-violet-50/50 shadow-sm ring-1 ring-violet-200"
-                            : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-2 h-2 rounded-full transition-colors ${
-                                config.model === model.id ? "bg-violet-500 shadow-sm shadow-violet-400/50" : "bg-gray-300"
-                              }`}
-                            />
-                            <span className="text-sm font-medium text-gray-800">{model.name}</span>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 ${PROVIDER_COLORS[model.provider]}`}
-                            >
-                              {PROVIDER_LABELS[model.provider]}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 ${cat.className}`}
-                            >
-                              <CatIcon className="w-2.5 h-2.5 mr-0.5" />
-                              {cat.label}
-                            </Badge>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xs text-gray-400">
-                              {model.inputPricePer1K === 0
-                                ? "Free"
-                                : `$${model.inputPricePer1K}/1K`}
-                            </div>
+                  {MODELS.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => setConfig((c) => ({ ...c, model: model.id }))}
+                      className={`w-full text-left p-4 border transition-all ${
+                        config.model === model.id
+                          ? "border-foreground bg-foreground/5"
+                          : "border-border bg-background hover:border-foreground/40 hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-2 h-2 transition-colors ${
+                              config.model === model.id ? "bg-foreground" : "bg-muted-foreground/30"
+                            }`}
+                          />
+                          <span className="text-sm font-medium">{model.name}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {PROVIDER_LABELS[model.provider]}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {CATEGORY_LABELS[model.category]}
+                          </Badge>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">
+                            {model.inputPricePer1K === 0
+                              ? "Free"
+                              : `$${model.inputPricePer1K}/1K`}
                           </div>
                         </div>
-                        <p className="text-xs text-gray-400 mt-1.5 ml-5">{model.description}</p>
-                      </button>
-                    )
-                  })}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5 ml-5">{model.description}</p>
+                    </button>
+                  ))}
                 </CardContent>
               </Card>
 
               <div className="space-y-5">
-                <Card className="bg-white border-gray-200 shadow-sm">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">System Prompt Style</CardTitle>
-                    <CardDescription className="text-[13px] text-gray-500 leading-relaxed">
+                    <CardTitle className="text-base">System Prompt Style</CardTitle>
+                    <CardDescription className="text-[13px] leading-relaxed">
                       Controls the AI&apos;s personality and writing style for generation.
                     </CardDescription>
                   </CardHeader>
@@ -570,16 +538,16 @@ export default function Home() {
                         }))
                       }}
                     >
-                      <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-800 hover:border-gray-300 transition-colors">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-white border-gray-200">
+                      <SelectContent>
                         {SYSTEM_PROMPT_PRESETS.map((p) => (
-                          <SelectItem key={p.id} value={p.id} className="text-gray-800 focus:bg-gray-100 focus:text-gray-900">
+                          <SelectItem key={p.id} value={p.id}>
                             {p.label}
                           </SelectItem>
                         ))}
-                        <SelectItem value="custom" className="text-gray-800 focus:bg-gray-100 focus:text-gray-900">
+                        <SelectItem value="custom">
                           Custom Prompt
                         </SelectItem>
                       </SelectContent>
@@ -587,51 +555,45 @@ export default function Home() {
 
                     <Textarea
                       placeholder="Write your own system prompt..."
-                      className="min-h-[160px] bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-y text-sm leading-relaxed focus:border-violet-400 focus:ring-violet-200 transition-colors"
+                      className="min-h-[160px] resize-y text-sm leading-relaxed"
                       value={config.customSystemPrompt}
                       onChange={(e) => setConfig((c) => ({ ...c, systemPromptStyle: "custom", customSystemPrompt: e.target.value }))}
                     />
                   </CardContent>
                 </Card>
 
-                <Card className="bg-white border-gray-200 shadow-sm">
+                <Card className="border-blue-200">
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">Tool Toggles</CardTitle>
-                    <CardDescription className="text-[13px] text-gray-500 leading-relaxed">
-                      Enable capabilities that affect how the document is generated and delivered.
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Code2 className="w-4 h-4 text-blue-600" />
+                      AI Function Calling Tools
+                    </CardTitle>
+                    <CardDescription className="text-[13px] leading-relaxed">
+                      The LLM actively decides when to invoke these during generation. Results are returned to the model before it writes the proposal — the model cannot fake them.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-5">
+                  <CardContent className="space-y-1">
                     {[
                       {
-                        key: "mirrorSamples" as const,
-                        label: "Mirror Samples Provided",
-                        description: "Use reference content to match style and structure of the output",
-                        color: "text-violet-600",
+                        key: "searchWeb" as const,
+                        label: "Search Web",
+                        description: "LLM calls Tavily for live information it can't know from training data",
                       },
                       {
-                        key: "extractLogo" as const,
-                        label: "Extract and Place Logo",
-                        description: "Detect an image/logo from reference content and display it in the output",
-                        color: "text-sky-600",
+                        key: "enrichCompany" as const,
+                        label: "Enrich Company",
+                        description: "LLM fetches real-time company intelligence — funding, products, news — to personalize the proposal",
                       },
                       {
-                        key: "signableLink" as const,
-                        label: "Generate Signable Web Link",
-                        description: "Create a SignWell signing link for the generated agreement",
-                        color: "text-emerald-600",
-                      },
-                      {
-                        key: "downloadPdf" as const,
-                        label: "Download PDF",
-                        description: "Enable PDF/HTML export of the final generated document",
-                        color: "text-amber-600",
+                        key: "enrichCrm" as const,
+                        label: "Enrich CRM",
+                        description: "LLM logs the opportunity to a Notion CRM database once it has enough context from the conversation",
                       },
                     ].map((tool) => (
-                      <div key={tool.key} className="flex items-start justify-between gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                      <div key={tool.key} className="flex items-start justify-between gap-4 p-3 hover:bg-blue-50/50 transition-colors">
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${tool.color}`}>{tool.label}</p>
-                          <p className="text-xs text-gray-400 mt-1 leading-relaxed">{tool.description}</p>
+                          <p className="text-sm font-medium">{tool.label}</p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{tool.description}</p>
                         </div>
                         <Switch
                           checked={config.tools[tool.key]}
@@ -656,38 +618,30 @@ export default function Home() {
                     label: "Latency",
                     value: formatLatency(lastResult.latencyMs),
                     icon: <Clock className="w-4 h-4" />,
-                    color: "text-sky-600",
-                    bg: "bg-sky-50",
                   },
                   {
                     label: "Estimated Cost",
                     value: formatCost(lastResult.estimatedCostUsd),
                     icon: <DollarSign className="w-4 h-4" />,
-                    color: "text-emerald-600",
-                    bg: "bg-emerald-50",
                   },
                   {
                     label: "Total Tokens",
                     value: (lastResult.inputTokens + lastResult.outputTokens).toLocaleString(),
                     icon: <Zap className="w-4 h-4" />,
-                    color: "text-amber-600",
-                    bg: "bg-amber-50",
                   },
                   {
                     label: "Model",
                     value: currentModel?.name ?? "--",
                     icon: <Sparkles className="w-4 h-4" />,
-                    color: "text-violet-600",
-                    bg: "bg-violet-50",
                   },
                 ].map((stat) => (
-                  <Card key={stat.label} className={`${stat.bg} border-gray-200 shadow-sm`}>
+                  <Card key={stat.label}>
                     <CardContent className="pt-5 pb-4">
-                      <div className={`flex items-center gap-2 ${stat.color} mb-2`}>
+                      <div className="flex items-center gap-2 text-muted-foreground mb-2">
                         {stat.icon}
-                        <span className="text-xs text-gray-500 font-medium">{stat.label}</span>
+                        <span className="text-xs font-medium">{stat.label}</span>
                       </div>
-                      <p className="text-2xl font-semibold text-gray-900 tracking-tight">{stat.value}</p>
+                      <p className="text-2xl font-semibold tracking-tight">{stat.value}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -695,30 +649,23 @@ export default function Home() {
             )}
 
             {lastResult && (
-              <Card className="bg-white border-gray-200 shadow-sm">
+              <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">Last Run — Tools Used</CardTitle>
+                  <CardTitle className="text-base">Last Run — Tools Used</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(config.tools).map(([key, enabled]) => (
+                    {(Object.entries(config.tools) as [keyof Config["tools"], boolean][]).map(([key, enabled]) => (
                       <Badge
                         key={key}
                         variant={enabled ? "secondary" : "outline"}
-                        className={
-                          enabled
-                            ? "bg-violet-50 text-violet-700 border border-violet-200"
-                            : "text-gray-400 border-gray-200"
-                        }
+                        className={`${enabled ? "" : "text-muted-foreground/50"} ${
+                          enabled && ["searchWeb", "enrichCompany", "enrichCrm"].includes(key)
+                            ? "bg-blue-100 text-blue-700 border-blue-200"
+                            : ""
+                        }`}
                       >
-                        {enabled ? "\u2713" : "\u25CB"}{" "}
-                        {key === "mirrorSamples"
-                          ? "Mirror Samples"
-                          : key === "extractLogo"
-                          ? "Extract Logo"
-                          : key === "signableLink"
-                          ? "Signable Link"
-                          : "Download PDF"}
+                        {enabled ? "✓" : "○"} {TOOL_DISPLAY_NAMES[key]}
                       </Badge>
                     ))}
                   </div>
@@ -726,18 +673,17 @@ export default function Home() {
               </Card>
             )}
 
-            <Card className="bg-white border-gray-200 shadow-sm">
+            <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-base font-semibold text-gray-900 tracking-tight">Run History</CardTitle>
-                  <CardDescription className="text-[13px] text-gray-500 leading-relaxed">
+                  <CardTitle className="text-base">Run History</CardTitle>
+                  <CardDescription className="text-[13px] leading-relaxed">
                     Compare performance across models, prompts, and tool configurations
                   </CardDescription>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-gray-200 text-gray-500 bg-white hover:bg-gray-50 hover:text-gray-700 transition-all"
                   onClick={loadRuns}
                   disabled={isLoadingRuns}
                 >
@@ -747,17 +693,17 @@ export default function Home() {
               <CardContent>
                 {runs.length === 0 ? (
                   <div className="text-center py-16">
-                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
-                      <BarChart3 className="w-6 h-6 text-gray-400" />
+                    <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-3">
+                      <BarChart3 className="w-6 h-6 text-muted-foreground" />
                     </div>
-                    <p className="text-gray-500 text-sm font-medium">No runs yet</p>
-                    <p className="text-gray-400 text-xs mt-1">Generate a proposal to see analytics here</p>
+                    <p className="text-muted-foreground text-sm font-medium">No runs yet</p>
+                    <p className="text-muted-foreground/60 text-xs mt-1">Generate a proposal to see analytics here</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-gray-200 text-gray-400">
+                        <tr className="border-b border-border text-muted-foreground">
                           <th className="text-left pb-3 pr-4 font-medium text-xs uppercase tracking-wider">Model</th>
                           <th className="text-left pb-3 pr-4 font-medium text-xs uppercase tracking-wider">Provider</th>
                           <th className="text-right pb-3 pr-4 font-medium text-xs uppercase tracking-wider">Latency</th>
@@ -768,20 +714,17 @@ export default function Home() {
                       </thead>
                       <tbody>
                         {runs.map((run) => (
-                          <tr key={run.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                            <td className="py-3 pr-4 text-gray-800 font-medium">{run.model}</td>
+                          <tr key={run.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                            <td className="py-3 pr-4 font-medium">{run.model}</td>
                             <td className="py-3 pr-4">
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] px-1.5 py-0 ${PROVIDER_COLORS[run.provider] ?? ""}`}
-                              >
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                                 {PROVIDER_LABELS[run.provider] ?? run.provider}
                               </Badge>
                             </td>
-                            <td className="py-3 pr-4 text-right text-gray-600">
+                            <td className="py-3 pr-4 text-right text-muted-foreground">
                               {formatLatency(run.latency_ms)}
                             </td>
-                            <td className="py-3 pr-4 text-right text-gray-600">
+                            <td className="py-3 pr-4 text-right text-muted-foreground">
                               {formatCost(Number(run.estimated_cost_usd))}
                             </td>
                             <td className="py-3 pr-4">
@@ -791,17 +734,21 @@ export default function Home() {
                                     <Badge
                                       key={t}
                                       variant="secondary"
-                                      className="text-[10px] px-1 py-0 bg-violet-50 text-violet-600 border-violet-200"
+                                      className={`text-[10px] px-1 py-0 ${
+                                        ["searchWeb", "enrichCompany", "enrichCrm"].includes(t)
+                                          ? "bg-blue-100 text-blue-700"
+                                          : ""
+                                      }`}
                                     >
-                                      {t}
+                                      {TOOL_DISPLAY_NAMES[t] ?? t}
                                     </Badge>
                                   ))
                                 ) : (
-                                  <span className="text-gray-300">none</span>
+                                  <span className="text-muted-foreground/40">none</span>
                                 )}
                               </div>
                             </td>
-                            <td className="py-3 text-gray-400">
+                            <td className="py-3 text-muted-foreground">
                               {new Date(run.created_at).toLocaleString("en-US", {
                                 month: "short",
                                 day: "numeric",

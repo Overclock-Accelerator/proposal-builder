@@ -1,0 +1,19 @@
+---
+description: Always-on project context for the proposal builder app
+alwaysApply: true
+---
+
+# Proposal Builder Context
+
+- Build for premium consultants, not a startup dashboard. The product should feel editorial, architectural, and high-trust.
+- Prefer a monochrome, high-contrast visual system: sharp corners, restrained UI, strong typography, minimal ornament, no playful gradients or saturated accents unless explicitly requested.
+- The current brand direction uses `Playfair Display` sparingly for brand moments and `Inter`/clean sans typography for the working UI.
+- Before changing styling, start with `app/globals.css` tokens and shared UI primitives instead of scattering one-off overrides through pages.
+- The app is a Next.js 16 App Router project with React 19, Tailwind 4, and `shadcn/ui`-style components driven by CSS variables.
+- Treat Next.js 16 as version-sensitive: read the relevant docs under `node_modules/next/dist/docs/` before relying on older patterns.
+- Core product flow: users describe a consulting engagement, choose a model/system prompt/tooling mix, and generate proposal or agreement content.
+- LLM orchestration lives in `lib/llm.ts` and supports OpenAI, OpenRouter, Anthropic, and Gemini models.
+- Callable generation tools live in `lib/tools.ts`; current tools focus on web research, company enrichment, and CRM logging to Notion.
+- The generation API route is `app/api/generate/route.ts`; keep request/response shapes aligned with the UI in `app/page.tsx`.
+- Postgres-backed run persistence is optional. If the database is unavailable, preserve graceful degradation instead of breaking generation.
+- When touching the homepage, keep the experience consultant-facing: clear proposal workflow, confident copy, and analytics/config surfaces that feel operational rather than flashy.
