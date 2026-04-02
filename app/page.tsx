@@ -391,7 +391,7 @@ function createDemoContextFiles(prompt: string, demoIndex: number): ContextFile[
         "- includes a clear recommendation cadence so we know when decisions are required.",
       ].join("\n"),
     },
-  ].slice(0, 5)
+  ].slice(0, 5) as ContextFile[]
 }
 
 function formatCost(usd: number): string {

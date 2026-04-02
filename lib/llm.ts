@@ -95,13 +95,15 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
 
       for (const tc of choice.message.tool_calls) {
         let parsedArgs: Record<string, unknown> = {}
+        const fnName = tc.type === 'function' ? tc.function.name : tc.custom.name
+        const fnArgs = tc.type === 'function' ? tc.function.arguments : tc.custom.input
         try {
-          parsedArgs = JSON.parse(tc.function.arguments)
+          parsedArgs = JSON.parse(fnArgs)
         } catch {
           // Leave empty so the tool can surface a validation error cleanly.
         }
 
-        const toolResult = await executeTool(tc.function.name, parsedArgs)
+        const toolResult = await executeTool(fnName, parsedArgs)
         toolCallLog.push(toolResult)
         onToolCall?.(toolResult)
         toolResults.push({

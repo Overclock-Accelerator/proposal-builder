@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     const buffer = await Packer.toBuffer(doc)
     const fileName = `${toFileName(documentTitle)}-${Date.now()}.docx`
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type':
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
