@@ -2,6 +2,8 @@ export interface ModelConfig {
   id: string
   name: string
   provider: 'openrouter'
+  nativeVendor?: 'anthropic' | 'openai'
+  nativeModelId?: string
   vendor: string
   approxPricePer1M: number
   description: string
@@ -15,6 +17,8 @@ export const MODELS: ModelConfig[] = [
     id: 'anthropic/claude-haiku-4.5',
     name: 'Claude Haiku 4.5',
     provider: 'openrouter',
+    nativeVendor: 'anthropic',
+    nativeModelId: 'claude-haiku-4-5',
     vendor: 'Anthropic',
     approxPricePer1M: 1.0,
     description: 'Fast and efficient Anthropic option for lightweight proposal drafting.',
@@ -24,6 +28,8 @@ export const MODELS: ModelConfig[] = [
     id: 'anthropic/claude-sonnet-4.6',
     name: 'Claude Sonnet 4.6',
     provider: 'openrouter',
+    nativeVendor: 'anthropic',
+    nativeModelId: 'claude-sonnet-4-6',
     vendor: 'Anthropic',
     approxPricePer1M: 3.0,
     description: 'Balanced option with strong writing quality and reliable instruction-following.',
@@ -33,6 +39,8 @@ export const MODELS: ModelConfig[] = [
     id: 'anthropic/claude-opus-4.6',
     name: 'Claude Opus 4.6',
     provider: 'openrouter',
+    nativeVendor: 'anthropic',
+    nativeModelId: 'claude-opus-4-6',
     vendor: 'Anthropic',
     approxPricePer1M: 5.0,
     description: 'Highest-end writing quality when premium output matters more than speed.',
@@ -42,6 +50,8 @@ export const MODELS: ModelConfig[] = [
     id: 'openai/gpt-5.4-nano',
     name: 'GPT-5.4 Nano',
     provider: 'openrouter',
+    nativeVendor: 'openai',
+    nativeModelId: 'gpt-5.4-nano',
     vendor: 'OpenAI',
     approxPricePer1M: 0.2,
     description: 'Fast, cheap OpenAI option for quick iterations and low-cost runs.',
@@ -51,6 +61,8 @@ export const MODELS: ModelConfig[] = [
     id: 'openai/gpt-5.4-mini',
     name: 'GPT-5.4 Mini',
     provider: 'openrouter',
+    nativeVendor: 'openai',
+    nativeModelId: 'gpt-5.4-mini',
     vendor: 'OpenAI',
     approxPricePer1M: 0.75,
     description: 'Balanced speed and quality for fast OpenAI-based proposal generation.',
@@ -60,6 +72,8 @@ export const MODELS: ModelConfig[] = [
     id: 'openai/gpt-5.4',
     name: 'GPT-5.4',
     provider: 'openrouter',
+    nativeVendor: 'openai',
+    nativeModelId: 'gpt-5.4',
     vendor: 'OpenAI',
     approxPricePer1M: 2.5,
     description: 'OpenAI flagship with stronger reasoning and polish than the lighter GPT-5.4 variants.',
