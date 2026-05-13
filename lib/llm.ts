@@ -273,6 +273,7 @@ async function generateWithOpenAIDirect(options: GenerateOptions): Promise<Gener
       const toolResults: OpenAI.Chat.ChatCompletionToolMessageParam[] = []
 
       for (const tc of choice.message.tool_calls) {
+        if (tc.type !== 'function') continue
         let parsedArgs: Record<string, unknown> = {}
         try {
           parsedArgs = JSON.parse(tc.function.arguments)
